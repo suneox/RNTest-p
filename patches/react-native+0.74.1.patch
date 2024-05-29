@@ -1,0 +1,11 @@
+diff --git a/node_modules/react-native/Libraries/Components/TextInput/TextInput.d.ts b/node_modules/react-native/Libraries/Components/TextInput/TextInput.d.ts
+index 7234cbb..32cd8d2 100644
+--- a/node_modules/react-native/Libraries/Components/TextInput/TextInput.d.ts
++++ b/node_modules/react-native/Libraries/Components/TextInput/TextInput.d.ts
+@@ -907,6 +907,8 @@ export interface TextInputProps
+    * - >= 1: sets the maxFontSizeMultiplier of this node to this value
+    */
+   maxFontSizeMultiplier?: number | null | undefined;
++
++  onPasteImage?: (event: NativeSyntheticEvent<{uri: string; mime: string; base64Source: string}>) => void;
+ }

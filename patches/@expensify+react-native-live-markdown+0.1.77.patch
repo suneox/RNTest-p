@@ -1,0 +1,169 @@
+diff --git a/node_modules/@expensify/react-native-live-markdown/ios/RCTBaseTextInputView+Markdown.mm b/node_modules/@expensify/react-native-live-markdown/ios/RCTBaseTextInputView+Markdown.mm
+index 209dc6b..d29ae12 100644
+--- a/node_modules/@expensify/react-native-live-markdown/ios/RCTBaseTextInputView+Markdown.mm
++++ b/node_modules/@expensify/react-native-live-markdown/ios/RCTBaseTextInputView+Markdown.mm
+@@ -2,8 +2,136 @@
+ #import <RNLiveMarkdown/RCTMarkdownUtils.h>
+ #import <objc/message.h>
+ 
++@implementation NSData (MimeType)
++
++- (NSString *)mimeTypeFromData {
++    uint8_t c;
++    [self getBytes:&c length:1];
++
++    switch (c) {
++        case 0xFF:
++            return @"image/jpeg";
++        case 0x89:
++            return @"image/png";
++        case 0x47:
++            return @"image/gif";
++        case 0x49:
++        case 0x4D:
++            return @"image/tiff";
++        default:
++            return @"application/octet-stream";
++    }
++}
++
++@end
++
+ @implementation RCTBaseTextInputView (Markdown)
+ 
++static char key;
++
++- (void)setOnPasteImage:(RCTDirectEventBlock)onPasteImage
++{
++    objc_setAssociatedObject(self, &key, onPasteImage, OBJC_ASSOCIATION_RETAIN);
++}
++
++- (RCTDirectEventBlock)onPasteImage
++{
++    return objc_getAssociatedObject(self, &key);
++}
++
++- (NSData *)extractImageFromPasteboard
++{
++    UIPasteboard *generalPasteboard = [UIPasteboard generalPasteboard];
++
++    NSData *imageData = nil;
++    for (NSString *type in generalPasteboard.pasteboardTypes) {
++        NSLog(@"type::: %@", type);
++        if ([type isEqualToString:@"public.jpeg"] || 
++            [type isEqualToString:@"public.png"] || 
++            [type isEqualToString:@"public.gif"] || 
++            [type isEqualToString:@"com.compuserve.gif"] || 
++            [type isEqualToString:@"public.tiff"]) {
++            imageData = [generalPasteboard dataForPasteboardType:type];
++            NSLog(@"imageData****** %@", imageData);
++            break;
++        }
++    }
++    NSLog(@"imageData::: %@", imageData);
++    return imageData;
++}
++
++- (void)paste:(id)sender
++{
++    if (!self.onPasteImage) {
++        [super paste:sender];
++        return;
++    }
++
++    BOOL hasImage;
++    hasImage = [UIPasteboard generalPasteboard].hasImages;
++    NSLog(@"hasImage::: %d", hasImage);
++    NSData *image;
++    if (hasImage) {
++        NSData *image = [self extractImageFromPasteboard];
++        NSLog(@"image::: %@", image);
++        if (image) {
++            NSLog(@"Image found in clipboard");
++            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
++                NSString *mimeType = [image mimeTypeFromData];
++                NSString *fileExtension = [mimeType stringByReplacingOccurrencesOfString:@"image/" withString:@""];
++                NSString *base64 = [image base64EncodedStringWithOptions:0];
++                NSLog(@"base64: %@", base64);
++                NSLog(@"mimeType: %@", mimeType);
++                NSLog(@"fileExtension: %@", fileExtension);
++                
++                NSArray<NSString *> *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
++                NSUUID *uuid = [NSUUID UUID];
++                NSString *uniqueFileName = [uuid UUIDString];
++                NSString *path = [NSString stringWithFormat:@"%@/%@.%@", paths[0], uniqueFileName, fileExtension];
++
++                [image writeToFile:path atomically:YES];
++
++                NSString *base64Source = [NSString stringWithFormat:@"data:%@;base64,%@", mimeType, base64];
++
++                NSLog(@"%@", path);
++                dispatch_async(dispatch_get_main_queue(), ^{
++                    if (self.onPasteImage) {
++                        self.onPasteImage(@{
++                            @"uri": path,
++                            @"mime": mimeType,
++                            @"base64Source": base64Source,
++                        });
++                    }
++                });
++            });
++        }
++        NSLog(@"No image found in clipboard");
++    } else {
++        NSLog(@"No image found in clipboard");
++        [super paste:sender];
++        [[self backedTextInputView] paste:sender];
++    }
++}
++
++
++- (BOOL)hasImageInPasteboard
++{
++  UIPasteboard *clipboard = [UIPasteboard generalPasteboard];
++  return clipboard.hasImages;
++}
++
++- (BOOL)canPerformAction:(SEL)action withSender:(id)sender
++{
++  if (action == @selector(paste:) && [self hasImageInPasteboard]) {
++    return (BOOL)self.onPasteImage;
++  }
++  return [super canPerformAction:action withSender:sender];
++}
++
++// =========================================================
++// =========================================================
++// =========================================================
++
+ - (void)setMarkdownUtils:(RCTMarkdownUtils *)markdownUtils {
+   objc_setAssociatedObject(self, @selector(getMarkdownUtils), markdownUtils, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+ }
+diff --git a/node_modules/@expensify/react-native-live-markdown/ios/RCTBaseTextInputViewManager+Markdown.h b/node_modules/@expensify/react-native-live-markdown/ios/RCTBaseTextInputViewManager+Markdown.h
+new file mode 100644
+index 0000000..0815933
+--- /dev/null
++++ b/node_modules/@expensify/react-native-live-markdown/ios/RCTBaseTextInputViewManager+Markdown.h
+@@ -0,0 +1,8 @@
++
++#import <React/RCTBaseTextInputViewManager.h>
++#import <React/RCTComponent.h>
++
++@interface RCTBaseTextInputViewManager (Markdown)
++
++@end
++
+diff --git a/node_modules/@expensify/react-native-live-markdown/ios/RCTBaseTextInputViewManager+Markdown.mm b/node_modules/@expensify/react-native-live-markdown/ios/RCTBaseTextInputViewManager+Markdown.mm
+new file mode 100644
+index 0000000..8a21baa
+--- /dev/null
++++ b/node_modules/@expensify/react-native-live-markdown/ios/RCTBaseTextInputViewManager+Markdown.mm
+@@ -0,0 +1,8 @@
++
++#import "RCTBaseTextInputViewManager+Markdown.h"
++
++@implementation RCTBaseTextInputViewManager (Markdown)
++
++RCT_EXPORT_VIEW_PROPERTY(onPasteImage, RCTDirectEventBlock)
++
++@end
